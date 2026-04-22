@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate, Link } from 'react-router-do
 import WorkspaceList from './components/WorkspaceList'
 import WorkflowEditor from './components/WorkflowEditor'
 import DatabasePage from './components/DatabasePage'
+import DocsViewer from './components/DocsViewer'
 import { ToastContainer } from './components/Toast'
 import { LanguageProvider, useLanguage } from './i18n'
 
@@ -127,6 +128,7 @@ export default function App() {
               </span>
             </Link>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <Link to="/docs" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', textDecoration: 'none' }}>AgentResult</Link>
               <Link to="/db" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', textDecoration: 'none' }}>数据库</Link>
               <LanguageToggle />
             </div>
@@ -138,6 +140,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/workspaces" element={<WorkspacePage />} />
               <Route path="/workspace/:workspaceId" element={<WorkflowEditor />} />
+              <Route path="/docs" element={<DocsViewer />} />
               <Route path="/db" element={<DatabasePage />} />
               <Route path="/dbSQLite" element={<DatabasePage />} />
             </Routes>

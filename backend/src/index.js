@@ -14,6 +14,7 @@ const scheduleRoutes = require('./routes/schedule')
 const executionRoutes = require('./routes/execution')
 const templateRoutes = require('./routes/templates')
 const dbRoutes = require('./routes/db')
+const docsRoutes = require('./routes/docs')
 const { initDatabase, ensureDefaultWorkspace } = require('./db')
 const { startScheduler } = require('./scheduler')
 
@@ -37,6 +38,7 @@ async function start() {
   app.use('/api/executions', executionRoutes)
   app.use('/api/templates', templateRoutes)
   app.use('/api/db', dbRoutes)
+  app.use('/api/docs', docsRoutes)
 
   // 健康检查
   app.get('/api/health', (req, res) => {
