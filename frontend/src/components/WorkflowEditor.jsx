@@ -616,7 +616,7 @@ function PropertyPanel({ node, onClose, onUpdate, onSaveAsTemplate, executionSta
 
 // ==================== 预设频率选项 ====================
 const FREQUENCY_OPTIONS_EN = [
-  // { label: 'Every 5 min', value: 'interval', interval: 5 },
+  { label: 'Every 5 min', value: 'interval', interval: 5 },
   // { label: 'Every 15 min', value: 'interval', interval: 15 },
   // { label: 'Every 30 min', value: 'interval', interval: 30 },
   // { label: 'Every hour', value: 'hourly' },
@@ -627,7 +627,7 @@ const FREQUENCY_OPTIONS_EN = [
 ]
 
 const FREQUENCY_OPTIONS_ZH = [
-  // { label: '每5分钟', value: 'interval', interval: 5 },
+  { label: '每5分钟', value: 'interval', interval: 5 },
   // { label: '每15分钟', value: 'interval', interval: 15 },
   // { label: '每30分钟', value: 'interval', interval: 30 },
   // { label: '每小时', value: 'hourly' },

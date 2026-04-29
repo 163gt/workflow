@@ -195,7 +195,7 @@ async function executeSchedule(schedule) {
 let lastCheckedAt = null
 
 // 检查间隔（毫秒）
-const intervalMs = 20 * 60 * 1000
+const intervalMs = 1 * 60 * 1000
 
 // 检查并执行到期的定时任务
 function checkAndExecuteSchedules() {
