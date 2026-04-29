@@ -621,7 +621,7 @@ router.post('/:id/execute', async (req, res) => {
       console.log('执行异常:', err.message);
     }
     
-    console.log('最终结果:', JSON.stringify(results));
+    // console.log('最终结果:', JSON.stringify(results));
     console.log('================');
     
     const finishedAt = new Date().toISOString();
