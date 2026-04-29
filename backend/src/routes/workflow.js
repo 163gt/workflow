@@ -657,4 +657,40 @@ router.post('/:id/execute', async (req, res) => {
   }
 });
 
+// 清理工作流的旧执行记录，只保留最新一条
+router.delete('/:workflowId/prune', (req, res) => {
+  try {
+    const db = getDb();
+    const { workflowId } = req.params;
+
+    // 查找该工作流的所有执行记录，按 startedAt 降序排列
+    const allLogs = [];
+    const stmt = db.prepare('SELECT id FROM execution_logs WHERE workflowId = ? ORDER BY startedAt DESC');
+    stmt.bind([workflowId]);
+    while (stmt.step()) {
+      allLogs.push(stmt.getAsObject());
+    }
+    stmt.free();
+
+    if (allLogs.length <= 1) {
+      return res.status(200).json({ message: '没有需要清理的记录' });
+    }
+
+    // 保留第一条（最新的），删除其余的
+    const toKeep = allLogs[0].id;
+    const toDelete = allLogs.slice(1).map(l => l.id);
+
+    // 先删除关联的节点执行记录
+    const placeholders = toDelete.map(() => '?').join(',');
+    db.run(`DELETE FROM node_executions WHERE executionId IN (${placeholders})`, toDelete);
+    // 删除执行日志
+    db.run(`DELETE FROM execution_logs WHERE id IN (${placeholders})`, toDelete);
+
+    saveDatabase();
+    res.status(200).json({ message: `已删除 ${toDelete.length} 条记录，保留最新一条: ${toKeep}` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
