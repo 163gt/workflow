@@ -71,23 +71,23 @@ function getNextRunTime(cron) {
     return next.toISOString()
   }
 
-  // 小时级调度
+  // 每天调度（如每天17:00）
   if (hour !== null && day === null && week === null) {
-    if (typeof hour === 'object' && hour.interval) {
-      next.setMinutes(0)
-      next.setHours(next.getHours() + hour.interval)
-    } else {
-      next.setMinutes(minute !== null ? minute : 0)
-      next.setHours(hour)
+    next.setMinutes(minute !== null ? minute : 0)
+    next.setHours(hour)
+    next.setSeconds(0)
+
+    // 如果目标时间已过，加1天
+    if (next <= now) {
+      next.setDate(next.getDate() + 1)
     }
     return next.toISOString()
   }
 
-  // 每天调度
-  if (day === null && week === null) {
-    next.setDate(next.getDate() + 1)
-    next.setHours(hour !== null ? hour : 0)
-    next.setMinutes(minute !== null ? minute : 0)
+  // 每X小时调度
+  if (typeof hour === 'object' && hour.interval) {
+    next.setMinutes(0)
+    next.setHours(next.getHours() + hour.interval)
     return next.toISOString()
   }
 
