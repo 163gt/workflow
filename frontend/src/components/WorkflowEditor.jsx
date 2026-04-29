@@ -1019,21 +1019,48 @@ function ExecutionPanel({ workflowId, onSelectLog, selectedLogId, selectedLog })
     <div style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <span style={{ margin: 0, fontSize: '13px', letterSpacing: '2px', color: colors.text }}>{t('execution log').toUpperCase()}</span>
-        <span
-          onClick={loadLogs}
-          style={{
-            padding: '8px 16px',
-            background: 'transparent',
-            border: '1px solid rgba(100, 180, 255, 0.25)',
-            borderRadius: '6px',
-            color: 'rgba(100, 180, 255, 0.7)',
-            fontSize: '11px',
-            letterSpacing: '1px',
-            cursor: 'pointer'
-          }}
-        >
-          {t('refresh')}
-        </span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <span
+            onClick={async () => {
+              if (!confirm('确定要删除所有执行记录吗？将只保留最新一条。')) return
+              try {
+                const res = await fetch(`/api/workflows/${workflowId}/prune`, { method: 'DELETE' })
+                if (res.ok) {
+                  loadLogs(1)
+                }
+              } catch (error) {
+                console.error('Prune failed:', error)
+              }
+            }}
+            style={{
+              padding: '8px 16px',
+              background: 'transparent',
+              border: '1px solid rgba(255, 77, 79, 0.3)',
+              borderRadius: '6px',
+              color: 'rgba(255, 77, 79, 0.7)',
+              fontSize: '11px',
+              letterSpacing: '1px',
+              cursor: 'pointer'
+            }}
+          >
+            {t('deleteOldRecords')}
+          </span>
+          <span
+            onClick={loadLogs}
+            style={{
+              padding: '8px 16px',
+              background: 'transparent',
+              border: '1px solid rgba(100, 180, 255, 0.25)',
+              borderRadius: '6px',
+              color: 'rgba(100, 180, 255, 0.7)',
+              fontSize: '11px',
+              letterSpacing: '1px',
+              cursor: 'pointer'
+            }}
+          >
+            {t('refresh')}
+          </span>
+        </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', gap: '16px', overflow: 'hidden' }}>

@@ -74,7 +74,13 @@ async function initDatabase() {
       FOREIGN KEY (scheduleId) REFERENCES schedules(id)
     )
   `);
-  
+
+  // 为 execution_logs 创建索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_execution_logs_workflowId ON execution_logs(workflowId)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_execution_logs_scheduleId ON execution_logs(scheduleId)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_execution_logs_startedAt ON execution_logs(startedAt)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status)');
+
   // 如果 execution_logs 表已存在但没有 result 列，则添加
   const tableInfo = db.exec("PRAGMA table_info(execution_logs)");
   const hasResultColumn = tableInfo.length > 0 && tableInfo[0].values.some(col => col[1] === 'result');
@@ -111,6 +117,10 @@ async function initDatabase() {
       console.error('添加 requestInfo 列失败:', e.message);
     }
   }
+
+  // 为 node_executions 创建索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_node_executions_executionId ON node_executions(executionId)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_node_executions_nodeId ON node_executions(nodeId)');
 
   // 创建节点模板表
   db.run(`
