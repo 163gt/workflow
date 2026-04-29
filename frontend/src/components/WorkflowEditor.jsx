@@ -616,29 +616,25 @@ function PropertyPanel({ node, onClose, onUpdate, onSaveAsTemplate, executionSta
 
 // ==================== 预设频率选项 ====================
 const FREQUENCY_OPTIONS_EN = [
-  { label: 'Every 5 min', value: 'interval', interval: 5 },
-  { label: 'Every 15 min', value: 'interval', interval: 15 },
-  { label: 'Every 30 min', value: 'interval', interval: 30 },
-  { label: 'Every hour', value: 'hourly' },
-  { label: 'Every 6 hours', value: 'interval', interval: 360 },
-  { label: 'Daily at midnight', value: 'daily', hour: 0, minute: 0 },
-  { label: 'Daily at 9 AM', value: 'daily', hour: 9, minute: 0 },
-  { label: 'Daily at 6 PM', value: 'daily', hour: 18, minute: 0 },
-  { label: 'Weekly on Monday', value: 'weekly', day: 1, hour: 0, minute: 0 },
-  { label: 'Monthly on 1st', value: 'monthly', day: 1, hour: 0, minute: 0 },
+  // { label: 'Every 5 min', value: 'interval', interval: 5 },
+  // { label: 'Every 15 min', value: 'interval', interval: 15 },
+  // { label: 'Every 30 min', value: 'interval', interval: 30 },
+  // { label: 'Every hour', value: 'hourly' },
+  // { label: 'Every 6 hours', value: 'interval', interval: 360 },
+  ...Array.from({ length: 23 }, (_, i) => ({ label: `Daily at ${i + 1}:00`, value: 'daily', hour: i + 1, minute: 0 })),
+  // { label: 'Weekly on Monday', value: 'weekly', day: 1, hour: 0, minute: 0 },
+  // { label: 'Monthly on 1st', value: 'monthly', day: 1, hour: 0, minute: 0 },
 ]
 
 const FREQUENCY_OPTIONS_ZH = [
-  { label: '每5分钟', value: 'interval', interval: 5 },
-  { label: '每15分钟', value: 'interval', interval: 15 },
-  { label: '每30分钟', value: 'interval', interval: 30 },
-  { label: '每小时', value: 'hourly' },
-  { label: '每6小时', value: 'interval', interval: 360 },
-  { label: '每天凌晨', value: 'daily', hour: 0, minute: 0 },
-  { label: '每天9点', value: 'daily', hour: 9, minute: 0 },
-  { label: '每天18点', value: 'daily', hour: 18, minute: 0 },
-  { label: '每周一', value: 'weekly', day: 1, hour: 0, minute: 0 },
-  { label: '每月1号', value: 'monthly', day: 1, hour: 0, minute: 0 },
+  // { label: '每5分钟', value: 'interval', interval: 5 },
+  // { label: '每15分钟', value: 'interval', interval: 15 },
+  // { label: '每30分钟', value: 'interval', interval: 30 },
+  // { label: '每小时', value: 'hourly' },
+  // { label: '每6小时', value: 'interval', interval: 360 },
+  ...Array.from({ length: 23 }, (_, i) => ({ label: `每天${i + 1}点`, value: 'daily', hour: i + 1, minute: 0 })),
+  // { label: '每周一', value: 'weekly', day: 1, hour: 0, minute: 0 },
+  // { label: '每月1号', value: 'monthly', day: 1, hour: 0, minute: 0 },
 ]
 
 function optionToCron(option) {
