@@ -124,20 +124,11 @@ function getApiUrl() {
 async function executeSchedule(schedule) {
   console.log(`[调度器] 执行任务: ${schedule.name} (${schedule.id})`)
 
-  // 创建执行日志（记录定时任务触发的执行）
+  // 通过 HTTP 调用立即执行的 API（API 会创建执行记录）
   const db = getDb()
-  const executionId = require('uuid').v4()
-  const startedAt = new Date().toISOString()
-
-  db.run(
-    'INSERT INTO execution_logs (id, workflowId, scheduleId, status, startedAt) VALUES (?, ?, ?, ?, ?)',
-    [executionId, schedule.workflowId, schedule.id, 'running', startedAt]
-  )
-  saveDatabase()
+  const apiUrl = getApiUrl()
 
   try {
-    // 通过 HTTP 调用立即执行的 API
-    const apiUrl = getApiUrl()
     const response = await fetch(`${apiUrl}/api/workflows/${schedule.workflowId}/execute`, {
       method: 'POST',
       headers: {
@@ -147,18 +138,10 @@ async function executeSchedule(schedule) {
     })
 
     const result = await response.json()
-
-    // 更新执行日志
-    const finishedAt = new Date().toISOString()
+    const now = new Date().toISOString()
     const status = result.status || (response.ok ? 'success' : 'failed')
 
-    db.run(
-      'UPDATE execution_logs SET status = ?, result = ?, error = ?, finishedAt = ? WHERE id = ?',
-      [status, JSON.stringify(result.results), result.error, finishedAt, executionId]
-    )
-
     // 更新定时任务最后执行时间
-    const now = new Date().toISOString()
     const cron = parseCron(schedule.cronExpression)
     const nextRunAt = cron ? getNextRunTime(cron) : null
 
@@ -180,10 +163,14 @@ async function executeSchedule(schedule) {
   } catch (error) {
     console.error(`[调度器] 任务执行失败: ${schedule.name}, 错误: ${error.message}`)
 
-    const finishedAt = new Date().toISOString()
+    // 即使执行失败，也更新 lastRunAt 防止重复执行
+    const now = new Date().toISOString()
+    const cron = parseCron(schedule.cronExpression)
+    const nextRunAt = cron ? getNextRunTime(cron) : null
+
     db.run(
-      'UPDATE execution_logs SET status = ?, error = ?, finishedAt = ? WHERE id = ?',
-      ['failed', error.message, finishedAt, executionId]
+      'UPDATE schedules SET lastRunAt = ?, nextRunAt = ? WHERE id = ?',
+      [now, nextRunAt, schedule.id]
     )
     saveDatabase()
 
@@ -199,6 +186,8 @@ const intervalMs = 1 * 60 * 1000
 
 // 检查并执行到期的定时任务
 function checkAndExecuteSchedules() {
+  console.log('时间到，执行检查');
+  
   const db = getDb()
   const now = new Date()
 
@@ -214,9 +203,12 @@ function checkAndExecuteSchedules() {
     const cron = parseCron(schedule.cronExpression)
     if (!cron) continue
 
-    // 检查当前时间是否应该执行
-    if (shouldRunAtTime(cron, now)) {
-      setImmediate(() => executeSchedule(schedule))
+    // 检查当前时间是否应该执行（且未在 lastRunAt 之后执行过）
+    const shouldNotRepeat = schedule.lastRunAt && new Date(schedule.lastRunAt).getTime() >= now.getTime() - 60000
+    if (shouldRunAtTime(cron, now) && !shouldNotRepeat) {
+      setImmediate(() => executeSchedule(schedule).catch(err => {
+        console.error(`[调度器] 异步任务执行异常: ${err.message}`)
+      }))
       continue
     }
 
@@ -225,8 +217,14 @@ function checkAndExecuteSchedules() {
       const checkStart = new Date(Math.max(lastCheckedAt.getTime(), now.getTime() - intervalMs))
       // 遍历检查间隔内的每分钟
       for (let t = new Date(checkStart); t < now; t.setMinutes(t.getMinutes() + 1)) {
+        // 检查是否已经在 lastRunAt 之后执行过了
+        if (schedule.lastRunAt && new Date(t) <= new Date(schedule.lastRunAt)) {
+          continue
+        }
         if (shouldRunAtTime(cron, t)) {
-          setImmediate(() => executeSchedule(schedule))
+          setImmediate(() => executeSchedule(schedule).catch(err => {
+            console.error(`[调度器] 补执行任务异常: ${err.message}`)
+          }))
           break  // 只补执行一次
         }
       }
