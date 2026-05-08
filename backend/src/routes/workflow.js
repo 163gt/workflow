@@ -211,21 +211,30 @@ router.post('/:id/execute', async (req, res) => {
         errorMessage = '工作流缺少开始节点';
       } else {
         // BFS/DFS 遍历 - 从开始节点出发，按边顺序执行
-        const visited = new Set();
-        const queue = [startNode.id];
-        const nodeInputMap = {}; // 记录每个节点的输入
-        
-        // 开始节点的输入为空
-        nodeInputMap[startNode.id] = {};
+        let processedTaskCount = 0;
+        const queue = [{ nodeId: startNode.id, input: {}, fromNodeId: null, viaEdgeId: null, sourceHandle: null }];
+        const maxTaskCount = Math.max(nodes.length * Math.max(edges.length, 1) * 10, 1000);
+        const incomingEdgesByTarget = edges.reduce((map, edge) => {
+          if (!map.has(edge.target)) {
+            map.set(edge.target, []);
+          }
+          map.get(edge.target).push(edge);
+          return map;
+        }, new Map());
+        const dataProcessAggregateState = new Map();
         
         while (queue.length > 0) {
-          const nodeId = queue.shift();
+          const currentTask = queue.shift();
+          const { nodeId, fromNodeId = null, viaEdgeId = null, sourceHandle = null } = currentTask;
+          let input = currentTask.input ?? {};
+          processedTaskCount += 1;
           
-          if (visited.has(nodeId)) {
-            console.log('跳过已访问节点:', nodeId);
-            continue;
+          if (processedTaskCount > maxTaskCount) {
+            console.log('执行任务数量超出安全限制:', nodeId);
+            console.log('工作流执行已被安全限制中断');
+            break;
           }
-          visited.add(nodeId);
+          
           
           const node = nodeMap.get(nodeId);
           if (!node) {
@@ -236,8 +245,42 @@ router.post('/:id/execute', async (req, res) => {
           console.log('处理节点:', node.id, node.type, node.data?.label);
           
           // 获取当前节点的输入（来自前一个节点的输出）
-          const input = nodeInputMap[nodeId] || {};
           
+          
+          const incomingEdges = incomingEdgesByTarget.get(nodeId) || [];
+          if (node.type === 'dataProcess' && incomingEdges.length > 1) {
+            const aggregateState = dataProcessAggregateState.get(nodeId) || {
+              receivedByEdgeId: new Map()
+            };
+
+            if (viaEdgeId) {
+              aggregateState.receivedByEdgeId.set(viaEdgeId, {
+                edgeId: viaEdgeId,
+                sourceNodeId: fromNodeId,
+                sourceHandle,
+                value: input
+              });
+            }
+
+            dataProcessAggregateState.set(nodeId, aggregateState);
+
+            if (aggregateState.receivedByEdgeId.size < incomingEdges.length) {
+              console.log(`等待数据处理节点聚合输入: ${aggregateState.receivedByEdgeId.size}/${incomingEdges.length}`, nodeId);
+              continue;
+            }
+
+            const aggregatedEntries = incomingEdges
+              .map(edge => aggregateState.receivedByEdgeId.get(edge.id))
+              .filter(Boolean);
+
+            input = {
+              values: aggregatedEntries.map(entry => entry.value)
+            };
+
+            dataProcessAggregateState.delete(nodeId);
+            console.log('数据处理节点聚合输入完成:', JSON.stringify(input));
+          }
+
           let result = null;
           let nodeStatus = 'success';
           let nodeError = null;
@@ -582,22 +625,34 @@ router.post('/:id/execute', async (req, res) => {
             console.log('=== 条件分支处理 ===');
             // 条件1 -> yes
             if (result.cond1) {
-              const edge1 = outgoingEdges.find(e => e.sourceHandle === 'yes');
+              const edge1 = outgoingEdges.filter(e => e.sourceHandle === 'yes');
               console.log('查找 yes 边:', edge1);
-              if (edge1 && !visited.has(edge1.target)) {
-                nodeInputMap[edge1.target] = input || result.originalInput || result.input || {};
-                queue.push(edge1.target);
-                console.log('条件1满足 -> 添加 yes 分支节点:', edge1.target);
+              for (const edge of edge1) {
+                const branchInput = input || result.originalInput || result.input || {};
+                queue.push({
+                  nodeId: edge.target,
+                  input: branchInput,
+                  fromNodeId: nodeId,
+                  viaEdgeId: edge.id,
+                  sourceHandle: edge.sourceHandle || null
+                });
+                console.log('条件1满足 -> 添加 yes 分支节点:', edge.target);
               }
             }
             // 条件2 -> no
             if (result.cond2) {
-              const edge2 = outgoingEdges.find(e => e.sourceHandle === 'no');
+              const edge2 = outgoingEdges.filter(e => e.sourceHandle === 'no');
               console.log('查找 no 边:', edge2);
-              if (edge2 && !visited.has(edge2.target)) {
-                nodeInputMap[edge2.target] = input || result.originalInput || result.input || {};
-                queue.push(edge2.target);
-                console.log('条件2满足 -> 添加 no 分支节点:', edge2.target);
+              for (const edge of edge2) {
+                const branchInput = input || result.originalInput || result.input || {};
+                queue.push({
+                  nodeId: edge.target,
+                  input: branchInput,
+                  fromNodeId: nodeId,
+                  viaEdgeId: edge.id,
+                  sourceHandle: edge.sourceHandle || null
+                });
+                console.log('条件2满足 -> 添加 no 分支节点:', edge.target);
               }
             }
             // 如果两个条件都不满足，不继续执行任何分支
@@ -607,11 +662,14 @@ router.post('/:id/execute', async (req, res) => {
           } else {
             // 普通节点：所有出边都执行
             for (const edge of outgoingEdges) {
-              if (!visited.has(edge.target)) {
-                // 设置下一个节点的输入为当前节点的输出
-                nodeInputMap[edge.target] = result || {};
-                queue.push(edge.target);
-              }
+              // 设置下一个节点的输入为当前节点的输出
+              queue.push({
+                nodeId: edge.target,
+                input: result || {},
+                fromNodeId: nodeId,
+                viaEdgeId: edge.id,
+                sourceHandle: edge.sourceHandle || null
+              });
             }
           }
         }
