@@ -1,5 +1,6 @@
 # 后端忽略
 backend/node_modules/
+backend/data/backups/
 
 # 前端忽略
 frontend/node_modules/
