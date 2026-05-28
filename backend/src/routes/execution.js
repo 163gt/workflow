@@ -44,7 +44,8 @@ router.get('/', (req, res) => {
     while (stmt.step()) {
       const row = stmt.getAsObject();
       logs.push({
-        ...row
+        ...row,
+        paramsSnapshot: row.paramsSnapshot ? JSON.parse(row.paramsSnapshot) : null
       });
     }
     stmt.free();
@@ -103,6 +104,7 @@ router.get('/:id', (req, res) => {
 
       res.json({
         ...log,
+        paramsSnapshot: log.paramsSnapshot ? JSON.parse(log.paramsSnapshot) : null,
         nodeExecutions
       });
     } else {

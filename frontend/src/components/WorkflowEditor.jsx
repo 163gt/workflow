@@ -20,6 +20,7 @@ import HttpNode from './nodes/HttpNode'
 import DataProcessNode from './nodes/DataProcessNode'
 import ConditionNode from './nodes/ConditionNode'
 import SaveFileNode, { SaveFileNodePanel } from './nodes/SaveFileNode'
+import WorkflowParamsModal from './WorkflowParamsModal'
 import { useNodeTemplates } from '../hooks/useNodeTemplates'
 import {
   Button,
@@ -132,6 +133,55 @@ function ErrorDisplay({ message, onRetry }) {
       >
         RETRY
       </span>
+    </div>
+  )
+}
+
+function ManualExecutionOverlay() {
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(7, 10, 20, 0.62)',
+      backdropFilter: 'blur(8px)',
+      zIndex: 1400,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      <div style={{
+        minWidth: '260px',
+        padding: '24px 28px',
+        borderRadius: '18px',
+        background: 'linear-gradient(180deg, rgba(18, 24, 40, 0.96) 0%, rgba(10, 14, 24, 0.98) 100%)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '16px'
+      }}>
+        <div style={{
+          width: '42px',
+          height: '42px',
+          borderRadius: '50%',
+          border: '3px solid rgba(100, 181, 246, 0.18)',
+          borderTopColor: '#64b5f6',
+          animation: 'manual-exec-spin 0.9s linear infinite'
+        }} />
+        <div style={{ color: '#e8eefc', fontSize: '14px', letterSpacing: '0.5px' }}>
+          正在手动执行...
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '12px' }}>
+          请稍候，执行完成后会自动恢复
+        </div>
+      </div>
+      <style>{`
+        @keyframes manual-exec-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }
@@ -1375,6 +1425,7 @@ function WorkflowEditorInner() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('schedule')
   const [executing, setExecuting] = useState(false)
+  const [manualExecuting, setManualExecuting] = useState(false)
   const [selectedNode, setSelectedNode] = useState(null)
 
   // 底部面板状态 - 可拖动调整大小
@@ -1398,6 +1449,7 @@ function WorkflowEditorInner() {
 
   const [templateModalVisible, setTemplateModalVisible] = useState(false)
   const [saveTemplateModalVisible, setSaveTemplateModalVisible] = useState(false)
+  const [paramsModalVisible, setParamsModalVisible] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [templateNodeData, setTemplateNodeData] = useState(null)
 
@@ -1814,7 +1866,8 @@ function WorkflowEditorInner() {
         body: JSON.stringify({
           name: workspace?.name || t('workflow'),
           nodes: JSON.stringify(nodes),
-          edges: JSON.stringify(edges)
+          edges: JSON.stringify(edges),
+          paramsSchema: workflow?.paramsSchema || []
         })
       })
 
@@ -1839,26 +1892,37 @@ function WorkflowEditorInner() {
     }
 
     setExecuting(true)
+    setManualExecuting(true)
     try {
-      const res = await fetch(`/api/workflows/${workflow.id}/execute`, { method: 'POST' })
+      const res = await fetch(`/api/workflows/${workflow.id}/execute-all-param-sets`, { method: 'POST' })
       const result = await res.json()
 
-      if (result.status === 'success') {
-        const duration = result.finishedAt ? ((new Date(result.finishedAt) - new Date(result.startedAt)) / 1000).toFixed(2) : 0
-        toast.success(t('execution successful') + ` ${t('duration')}: ${duration}${t('seconds')}`)
+      if (res.ok && (result.status === 'success' || result.status === 'partial_failed')) {
+        const executedCount = result.items?.length || 0
+        toast.success(`${t('execution successful')} (${executedCount})`)
         setActiveTab('execution')
         setIsPanelCollapsed(false)
       } else {
-        toast.error(t('execution failed') + `: ${result.error}`)
+        toast.error(t('execution failed') + `: ${result.error || 'Unknown error'}`)
       }
     } catch (error) {
       toast.error(t('execution failed') + ': ' + error.message)
     } finally {
       setExecuting(false)
+      setManualExecuting(false)
     }
   }
 
   const handleBack = () => navigate('/workspaces')
+
+  const handleWorkflowUpdated = useCallback((updatedWorkflow) => {
+    setWorkflow(updatedWorkflow)
+  }, [])
+
+  const handleParamsExecutionFinished = useCallback(() => {
+    setActiveTab('execution')
+    setIsPanelCollapsed(false)
+  }, [])
 
   if (loading) return <Spin size="large" tip="Loading..." />
   if (error) return (
@@ -1870,6 +1934,7 @@ function WorkflowEditorInner() {
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: colors.bgPrimary }}>
+      {manualExecuting && <ManualExecutionOverlay />}
       {/* 顶部工具栏 */}
       <div style={{
         padding: '12px 24px',
@@ -1902,6 +1967,12 @@ function WorkflowEditorInner() {
             />
           </Tooltip>
           <Button
+            onClick={() => setParamsModalVisible(true)}
+            theme="light"
+          >
+            Params
+          </Button>
+          <Button
             onClick={handleSave}
             theme="light"
           >
@@ -1913,7 +1984,7 @@ function WorkflowEditorInner() {
             theme="solid"
             type="primary"
           >
-            {executing ? t('running...') : t('run')}
+            {executing ? t('running...') : 'Run All'}
           </Button>
         </Space>
       </div>
@@ -2164,6 +2235,17 @@ function WorkflowEditorInner() {
       </div>
 
       {/* 模板选择弹窗 */}
+      <WorkflowParamsModal
+        visible={paramsModalVisible}
+        workflow={workflow}
+        nodes={nodes}
+        edges={edges}
+        onClose={() => setParamsModalVisible(false)}
+        onWorkflowUpdated={handleWorkflowUpdated}
+        onExecutionFinished={handleParamsExecutionFinished}
+        onManualExecutionStateChange={setManualExecuting}
+      />
+
       <Modal
         visible={templateModalVisible}
         onCancel={() => setTemplateModalVisible(false)}
