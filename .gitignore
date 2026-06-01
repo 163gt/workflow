@@ -7,6 +7,9 @@ frontend/node_modules/
 frontend/dist/
 
 # 通用忽略
+.idea/
 .DS_Store
 *.log
 *.db
+*.xml
+*.iml
