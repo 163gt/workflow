@@ -97,6 +97,16 @@ async function executeSchedule(schedule) {
 
   const db = getDb();
   const apiUrl = getApiUrl();
+  const triggeredAt = new Date().toISOString();
+  const cron = parseCron(schedule.cronExpression);
+  const nextRunAt = cron ? getNextRunTime(cron) : null;
+
+  // 先标记本次调度已触发，避免长任务跨分钟后被补偿逻辑重复触发。
+  db.run(
+    'UPDATE schedules SET lastRunAt = ?, nextRunAt = ? WHERE id = ?',
+    [triggeredAt, nextRunAt, schedule.id]
+  );
+  saveDatabase();
 
   try {
     const response = await fetch(`${apiUrl}/api/workflows/${schedule.workflowId}/execute-all-param-sets`, {
@@ -108,16 +118,7 @@ async function executeSchedule(schedule) {
     });
 
     const result = await response.json();
-    const now = new Date().toISOString();
     const status = result.status || (response.ok ? 'success' : 'failed');
-    const cron = parseCron(schedule.cronExpression);
-    const nextRunAt = cron ? getNextRunTime(cron) : null;
-
-    db.run(
-      'UPDATE schedules SET lastRunAt = ?, nextRunAt = ? WHERE id = ?',
-      [now, nextRunAt, schedule.id]
-    );
-    saveDatabase();
 
     console.log(`[Scheduler] 任务执行完成: ${schedule.name}, 状态: ${status}`);
     return {
@@ -128,16 +129,6 @@ async function executeSchedule(schedule) {
     };
   } catch (error) {
     console.error(`[Scheduler] 任务执行失败: ${schedule.name}, 错误: ${error.message}`);
-
-    const now = new Date().toISOString();
-    const cron = parseCron(schedule.cronExpression);
-    const nextRunAt = cron ? getNextRunTime(cron) : null;
-
-    db.run(
-      'UPDATE schedules SET lastRunAt = ?, nextRunAt = ? WHERE id = ?',
-      [now, nextRunAt, schedule.id]
-    );
-    saveDatabase();
 
     return { status: 'failed', error: error.message };
   }
@@ -156,6 +147,7 @@ function checkAndExecuteSchedules() {
   while (stmt.step()) {
     schedules.push(stmt.getAsObject());
   }
+  console.log('待执行数', schedules.length);
   stmt.free();
 
   for (const schedule of schedules) {

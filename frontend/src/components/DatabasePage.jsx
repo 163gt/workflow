@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { toast } from './Toast'
 import { useLanguage } from '../i18n'
 
 export default function DatabasePage() {
   const { t } = useLanguage()
-  const navigate = useNavigate()
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(true)
   const [backing, setBacking] = useState(false)
+  const [cleaningLogs, setCleaningLogs] = useState(false)
   const [dbInfo, setDbInfo] = useState(null)
 
   const loadBackups = async () => {
@@ -77,7 +76,7 @@ export default function DatabasePage() {
   }
 
   const handleDelete = async (filename) => {
-    if (!window.confirm(t('confirm delete') || '确定删除备份文件？')) return
+    if (!window.confirm(t('confirm delete') || '确定删除备份文件吗？')) return
 
     try {
       const res = await fetch(`/api/db/backup/${filename}`, { method: 'DELETE' })
@@ -92,6 +91,28 @@ export default function DatabasePage() {
       }
     } catch (error) {
       toast.error(`${t('delete failed') || '删除失败'}: ${error.message}`)
+    }
+  }
+
+  const handleKeepLatestExecutionLog = async () => {
+    const confirmed = window.confirm('确定清理执行日志吗？\n这会删除除最新一条外的所有执行记录，并压缩数据库文件。')
+    if (!confirmed) return
+
+    setCleaningLogs(true)
+    try {
+      const res = await fetch('/api/db/execution-logs/keep-latest', { method: 'POST' })
+      const result = await res.json()
+
+      if (result.status === 'success') {
+        toast.success(`清理完成，已删除 ${result.deleted || 0} 条执行记录`)
+        await loadDbInfo()
+      } else {
+        toast.error(`清理失败: ${result.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      toast.error(`清理失败: ${error.message}`)
+    } finally {
+      setCleaningLogs(false)
     }
   }
 
@@ -127,21 +148,19 @@ export default function DatabasePage() {
 
   return (
     <div style={{ padding: '32px', maxWidth: '1000px', margin: '0 auto' }}>
-      {/* 数据库信息 */}
       <div style={cardStyle}>
         <div style={titleStyle}>数据库信息</div>
         {dbInfo ? (
           <div style={infoStyle}>
-            <div>路径：{dbInfo.path}</div>
-            <div>大小：{formatBytes(dbInfo.size)}</div>
-            <div>表数量：{dbInfo.tables}</div>
+            <div>路径: {dbInfo.path}</div>
+            <div>大小: {formatBytes(dbInfo.size)}</div>
+            <div>表数量: {dbInfo.tables}</div>
           </div>
         ) : (
           <div style={{ color: '#666' }}>加载中...</div>
         )}
       </div>
 
-      {/* 备份操作 */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={titleStyle}>手动备份</div>
@@ -163,11 +182,37 @@ export default function DatabasePage() {
           </button>
         </div>
         <div style={infoStyle}>
-          备份文件将保存在 backups 文件夹中，可下载到本地保存
+          备份文件将保存在 `backups` 目录中，可下载到本地保存。
         </div>
       </div>
 
-      {/* 备份列表 */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+          <div>
+            <div style={titleStyle}>执行日志清理</div>
+            <div style={infoStyle}>
+              删除旧的执行日志，仅保留最新一条，同时压缩数据库文件。
+            </div>
+          </div>
+          <button
+            onClick={handleKeepLatestExecutionLog}
+            disabled={cleaningLogs}
+            style={{
+              padding: '10px 16px',
+              background: cleaningLogs ? 'rgba(255, 100, 100, 0.2)' : 'rgba(255, 100, 100, 0.35)',
+              border: '1px solid rgba(255, 100, 100, 0.25)',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '13px',
+              cursor: cleaningLogs ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {cleaningLogs ? '清理中...' : '一键清理，仅留最新'}
+          </button>
+        </div>
+      </div>
+
       <div style={cardStyle}>
         <div style={titleStyle}>备份列表</div>
         {backups.length === 0 ? (

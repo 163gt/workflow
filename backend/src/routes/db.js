@@ -2,7 +2,7 @@ const express = require('express')
 const router = express.Router()
 const path = require('path')
 const fs = require('fs')
-const { getDb } = require('../db')
+const { getDb, saveDatabase } = require('../db')
 
 // 数据库文件路径
 const dbPath = path.join(__dirname, '..', '..', 'data', 'workflows.db')
@@ -118,6 +118,59 @@ router.delete('/backup/:filename', (req, res) => {
 
     fs.unlinkSync(filepath)
     res.json({ status: 'success' })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// 仅保留最新一条执行记录，并压缩数据库文件
+router.post('/execution-logs/keep-latest', (req, res) => {
+  try {
+    const db = getDb()
+
+    const latestStmt = db.prepare(`
+      SELECT id
+      FROM execution_logs
+      ORDER BY startedAt DESC
+      LIMIT 1
+    `)
+
+    let latestId = null
+    if (latestStmt.step()) {
+      latestId = latestStmt.getAsObject().id
+    }
+    latestStmt.free()
+
+    const countStmt = db.prepare('SELECT COUNT(*) as total FROM execution_logs')
+    countStmt.step()
+    const total = Number(countStmt.getAsObject().total || 0)
+    countStmt.free()
+
+    if (!latestId) {
+      db.run('VACUUM')
+      saveDatabase()
+      return res.json({
+        status: 'success',
+        kept: 0,
+        deleted: 0,
+        totalBefore: total,
+        totalAfter: 0
+      })
+    }
+
+    db.run('DELETE FROM node_executions WHERE executionId != ?', [latestId])
+    db.run('DELETE FROM execution_logs WHERE id != ?', [latestId])
+    db.run('VACUUM')
+    saveDatabase()
+
+    res.json({
+      status: 'success',
+      kept: 1,
+      deleted: Math.max(total - 1, 0),
+      totalBefore: total,
+      totalAfter: 1,
+      latestExecutionId: latestId
+    })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
